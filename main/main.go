@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"log/slog"
 	"os"
 	"strconv"
 	"strings"
@@ -49,17 +50,27 @@ func (rbi *RingBufferInt) Get() []int {
 }
 
 func read(nextstep chan int, done chan bool) {
+
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+
+	child := logger.With(
+		slog.String("methd", "read"),
+	)
+
+	child.Info("Запущен метод считывания....")
 	scanner := bufio.NewScanner(os.Stdin)
 	var data string
 	for scanner.Scan() {
 		data = scanner.Text()
 		if strings.EqualFold(data, "exit") {
+			child.Info("Программа завершила работу")
 			fmt.Println("Программа завершила работу")
 			close(done)
 			return
 		}
 		number, err := strconv.Atoi(data)
 		if err != nil {
+			child.Warn("Введены некорректные данные")
 			fmt.Println("Программа обрабатывает только целые числа!")
 			continue
 		}
@@ -68,6 +79,7 @@ func read(nextstep chan int, done chan bool) {
 }
 
 func notnegativeFilter(prevChan <-chan int, nextChan chan<- int, done chan bool) {
+	slog.Info("Запущен фильтр отрицательных чисел, 1-й уровень", slog.String("methd", "notnegativeFilter"))
 	for {
 		select {
 		case data := <-prevChan:
@@ -75,12 +87,14 @@ func notnegativeFilter(prevChan <-chan int, nextChan chan<- int, done chan bool)
 				nextChan <- data
 			}
 		case <-done:
+			slog.Info("Завершение 1-го уровня", slog.String("methd", "notnegativeFilter"))
 			return
 		}
 	}
 }
 
 func notDividedThreeFilter(prevChan <-chan int, nextChan chan<- int, done chan bool) {
+	slog.Info("Запущен фильтр чисел кратных трём, 2-й уровень", slog.String("methd", "notDividedThreeFilte"))
 	for {
 		select {
 		case data := <-prevChan:
@@ -88,12 +102,14 @@ func notDividedThreeFilter(prevChan <-chan int, nextChan chan<- int, done chan b
 				nextChan <- data
 			}
 		case <-done:
+			slog.Info("Завершение 2-го уровня", slog.String("methd", "notDividedThreeFilte"))
 			return
 		}
 	}
 }
 
 func bufferFunc(prevChan <-chan int, nextChan chan<- int, done chan bool, size int, interval time.Duration) {
+	slog.Info("Запущен уровень буферизации, 3-й уровень", slog.String("methd", "bufferFunc"))
 	buffer := NewRingBufferInt(size)
 
 	for {
@@ -107,6 +123,7 @@ func bufferFunc(prevChan <-chan int, nextChan chan<- int, done chan bool, size i
 			}
 
 		case <-done:
+			slog.Info("Завершение 3-го уровня", slog.String("methd", "bufferFunc"))
 			return
 		}
 	}
@@ -115,6 +132,14 @@ func bufferFunc(prevChan <-chan int, nextChan chan<- int, done chan bool, size i
 func main() {
 	done := make(chan bool)
 	input := make(chan int)
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+
+	child := logger.With(
+		slog.String("method", "main"),
+	)
+
+	child.Info("Pipeline запущен....")
+
 	go read(input, done)
 
 	notnegativeChannel := make(chan int)
@@ -131,8 +156,10 @@ func main() {
 	for {
 		select {
 		case data := <-bufferChannel:
+			child.Info("Получены данные:", slog.Int("data", data))
 			fmt.Println("Получены данные: ", data)
 		case <-done:
+			child.Info("Выход из функции main")
 			return
 		}
 	}
